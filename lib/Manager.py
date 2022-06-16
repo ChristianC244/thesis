@@ -35,7 +35,7 @@ class Manager:
     
         subprocess.run("docker container prune -f", shell=True)
         self.update_transactions()
-        print(f"Starting {self.THREADS} threads with execution time: {self.TIME}")
+        print(f"Starting {self.THREADS} threads with execution time: {self.TIME//60} min")
         for t in self.threads:
             t.start()
         
@@ -49,7 +49,9 @@ class Manager:
                 [t.join() for t in self.threads]
                 break
             for i  in range(self.THREADS):
-                if not self.threads[i].is_alive(): self.threads[i] = threading.Thread(target= self.__thread_func, args= [i], name= i).start()
+                if not self.threads[i].is_alive(): 
+                    self.threads[i] = threading.Thread(target= self.__thread_func, args= [i], name= i)
+                    self.threads[i].start()
 
     
     def update_transactions(self):
