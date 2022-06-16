@@ -1,4 +1,10 @@
+# sensitive
 .env
 history.json
 data/
+
+#junk
 tmp/
+
+# vs code
+**/__pycache__/
