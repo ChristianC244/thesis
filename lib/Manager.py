@@ -9,6 +9,12 @@ import subprocess
 class Manager:
     
     def __init__(self, api_key: str, n_threads: int, time: int):
+        """
+        Parameters:
+            api_key: a string containing the etherscan api key
+            n_threads: how many threads to launch
+            time: max execution time for each thread
+        """
         self.API_KEY = api_key
         self.THREADS = n_threads
         self.TIME = time
@@ -29,6 +35,7 @@ class Manager:
                 None
 
     def start_scan(self):
+        """Starts the scan, it run indefinetly. to stop it press Ctrl-C"""
         junk = os.listdir(self.wd + "tmp/")
         for file in junk:
             os.remove(self.wd + "tmp/" + file)
@@ -42,6 +49,7 @@ class Manager:
         self.watchdog()
 
     def watchdog(self):
+        """Every minute checks if some thread has finish, if so it recreates it and start it. If a thread crashes it won't cause any problem"""
         while True:
             sleep(60)
             subprocess.run("docker container prune -f", shell=True, capture_output=True)
@@ -55,7 +63,7 @@ class Manager:
 
     
     def update_transactions(self):
-        
+        """Downloads new transactions from the latest block"""
         while True:
             block = int(self.get_latest_block_number()[2:], 16) # 0x2131 -> in int
             if block == self.prev_block:
@@ -71,7 +79,7 @@ class Manager:
             self.transactions.append(t["to"])
     
     def get_fields(self):
-
+        """Function called by a thread to receive a bytecode and it's address if never checked before """
         with self.lock:
             
             while True:
@@ -91,7 +99,7 @@ class Manager:
 
 
     def get_code(self, address: str):
-        """returns '0x' if not a contract, else a string with the hex bytecode. None if errors in address format or if the http request went wrong"""
+        """returns '0x' if not a contract, else a string with the hex bytecode"""
         # if not _check_addr(address): return None
         response = requests.get("https://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY))
         if response.status_code != 200: 
@@ -141,6 +149,7 @@ class Manager:
 
 
     def __thread_func(self, thread_n):
+        """Function runned by threads, it stores the bytecode into <workdir>/tmp/ and pass it to myth docker container. After the analysis the file get removed"""
         
         address, bytecode = self.get_fields()
         print(f"TH-{thread_n} is Scanning {address}")

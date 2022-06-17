@@ -23,7 +23,7 @@ wd = os.path.dirname(os.path.realpath(__file__))+"/"
 load_dotenv()
 # INFURA_ID = os.getenv("INFURA_ID")
 API_KEY = os.getenv("API_KEY")
-THREADS = 12
+THREADS = 8
 TIME = 60 * 30 # 30 minutes
 
 def main():
