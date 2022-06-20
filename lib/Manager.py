@@ -2,7 +2,7 @@ import requests
 import threading
 import os
 import json
-from time import sleep
+from time import sleep, time, strftime, gmtime
 import subprocess
 
 
@@ -52,10 +52,11 @@ class Manager:
         """Every minute checks if some thread has finish, if so it recreates it and start it. If a thread crashes it won't cause any problem"""
         while True:
             sleep(60)
-            subprocess.run("docker container prune -f", shell=True, capture_output=True)
             if self.stopped: 
                 [t.join() for t in self.threads]
+                subprocess.run("docker container prune -f", shell=True, capture_output=True)
                 break
+            subprocess.run("docker container prune -f", shell=True, capture_output=True)
             for i  in range(self.THREADS):
                 if not self.threads[i].is_alive(): 
                     self.threads[i] = threading.Thread(target= self.__thread_func, args= [i], name= i)
@@ -77,6 +78,7 @@ class Manager:
         for t in txs:
             self.transactions.append(t["from"])
             self.transactions.append(t["to"])
+        print(f"Added {len(self.transactions)} new addresses from block: {hex(block)}")
     
     def get_fields(self):
         """Function called by a thread to receive a bytecode and it's address if never checked before """
@@ -152,6 +154,7 @@ class Manager:
         """Function runned by threads, it stores the bytecode into <workdir>/tmp/ and pass it to myth docker container. After the analysis the file get removed"""
         
         address, bytecode = self.get_fields()
+        _start = time()
         print(f"TH-{thread_n} is Scanning {address}")
         with open(self.wd + "/tmp/" + address, "w") as file:
             file.write(bytecode)
@@ -161,4 +164,27 @@ class Manager:
             file.writelines(p.stdout.decode())
         
         os.remove(self.wd + "/tmp/" + address)
-        print(f"TH-{thread_n} is Done")
+        _stop = time()
+        print(log_output(thread_n, len(bytecode[2:]), _stop - _start))
+    
+def log_output(n_thread: int, bytecode_len: int, delta_time: float):
+    
+    s = f"TH-{n_thread} has analyzed "
+
+    # Correct unit of byte
+    u = ["GB", "MB", "kB", "B"]
+    i = 0
+    k = 1_000_000_000 #GB
+    while k > 0:
+        if bytecode_len / k > 1:
+            s += f"{(bytecode_len / k):.3f} {u[i]} "
+            break
+        k //= 1000
+        i += 1
+    
+    # Correct unit of time
+    t = strftime("%H:%M:%S", gmtime(delta_time))
+    s += f"in {t}s"
+
+    return s
+
