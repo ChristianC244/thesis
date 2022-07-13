@@ -39,8 +39,16 @@ class Manager:
         junk = os.listdir(self.wd + "tmp/")
         for file in junk:
             os.remove(self.wd + "tmp/" + file)
-    
-        subprocess.run("docker container prune -f", shell=True)
+
+        while True:
+            p = subprocess.run("docker container prune -f", shell=True, capture_output=True)
+            if p.stderr != b"": 
+                print("Docker deamon not running... Retry in 30s")
+                sleep(30)
+                continue
+            print(p.stdout.decode())
+            break
+        
         self.update_transactions()
         print(f"Starting {self.THREADS} threads with execution time: {self.TIME//60} min")
         for t in self.threads:
