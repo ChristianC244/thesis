@@ -5,6 +5,8 @@ import json
 from time import sleep, time, strftime, gmtime
 import subprocess
 
+import logging
+logging.basicConfig(filename='scanner.log', filemode='w', format='%(asctime)s | %(levelname)s | %(threadName)s | %(message)s',level=logging.DEBUG)
 
 class Manager:
     
@@ -33,17 +35,20 @@ class Manager:
         else: 
             with open(self.wd + "history.json","w") as file:
                 None
+        logging.debug("Manager class initiated")
+        logging.info(f"Loaded hystory file with: {len(self.history)} entries")
 
     def start_scan(self):
         """Starts the scan, it run indefinetly. to stop it press Ctrl-C"""
         junk = os.listdir(self.wd + "tmp/")
         for file in junk:
             os.remove(self.wd + "tmp/" + file)
-
+        logging.debug("'tmp/' folder cleared")
         while True:
             p = subprocess.run("docker container prune -f", shell=True, capture_output=True)
             if p.stderr != b"": 
                 print("Docker deamon not running... Retry in 30s")
+                logging.warning("Docker deamon not running... Retry in 30s")
                 sleep(30)
                 continue
             print(p.stdout.decode())
@@ -51,6 +56,7 @@ class Manager:
         
         self.update_transactions()
         print(f"Starting {self.THREADS} threads with execution time: {self.TIME//60} min")
+        logging.info(f"Starting {self.THREADS} threads with execution time: {self.TIME//60} min")
         for t in self.threads:
             t.start()
         
@@ -61,12 +67,14 @@ class Manager:
         while True:
             sleep(60)
             if self.stopped: 
+                logging.warning("Ctrl-C Pressed... Waiting for threads to terminate")
                 [t.join() for t in self.threads]
                 subprocess.run("docker container prune -f", shell=True, capture_output=True)
                 break
             subprocess.run("docker container prune -f", shell=True, capture_output=True)
             for i  in range(self.THREADS):
                 if not self.threads[i].is_alive(): 
+                    logging.debug(f"Starting thread {i}")
                     self.threads[i] = threading.Thread(target= self.__thread_func, args= [i], name= i)
                     self.threads[i].start()
 
@@ -77,6 +85,7 @@ class Manager:
             block = int(self.get_latest_block_number()[2:], 16) # 0x2131 -> in int
             if block == self.prev_block:
                 print("Waiting for a new block...")
+                logging.warning("Waiting for a new block...")
                 sleep(60)
                 continue
             self.prev_block = block
@@ -87,31 +96,35 @@ class Manager:
             self.transactions.append(t["from"])
             self.transactions.append(t["to"])
         print(f"Added {len(self.transactions)} new addresses from block: {hex(block)}")
+        logging.info(f"Added {len(self.transactions)} new addresses from block: {hex(block)}")
     
     def get_fields(self):
         """Function called by a thread to receive a bytecode and it's address if never checked before """
         with self.lock:
-            
             while True:
                 if len(self.transactions) == 0: self.update_transactions()
                 address = self.transactions.pop()
-                if address in self.history: continue
+                if address in self.history: 
+                    logging.debug(f"{address} already in history")
+                    continue
 
                 bytecode = self.get_code(address)
                 if bytecode == "0x": 
                     self.history[address] = False
+                    logging.debug(f"{address} is not a Smart Contract")
                     continue
 
                 self.history[address] = True 
                 with open(self.wd + "history.json","w") as file:
                     json.dump(self.history, file, indent = 4)
+                logging.debug(f"{address} is a valid Smart Contract")
                 return (address, bytecode)
 
 
     def get_code(self, address: str):
         """returns '0x' if not a contract, else a string with the hex bytecode"""
         # if not _check_addr(address): return None
-        response = requests.get("https://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY))
+        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY))
         if response.status_code != 200: 
             print(response.reason)
             exit()
@@ -128,7 +141,7 @@ class Manager:
         """Specify n for a specific block, leave -1 to get the last one created"""
     
         latest_block = self.get_latest_block_number() if n >= 0 else hex(n)
-        response = requests.get("https://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber&tag={}&boolean=true&apikey={}".format(latest_block, self.API_KEY))
+        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber&tag={}&boolean=true&apikey={}".format(latest_block, self.API_KEY))
         if response.status_code != 200: 
             # HTTP Error
             print(response.reason)
@@ -143,7 +156,7 @@ class Manager:
         return payload["result"]
     
     def get_latest_block_number(self) -> str:
-        response = requests.get("https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey={}".format(self.API_KEY))        
+        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey={}".format(self.API_KEY))        
         if response.status_code != 200: 
             """http error"""
             print(response.reason)
@@ -164,16 +177,19 @@ class Manager:
         address, bytecode = self.get_fields()
         _start = time()
         print(f"TH-{thread_n} is Scanning {address}")
+        logging.info(f"Start Scanning {address}")
         with open(self.wd + "/tmp/" + address, "w") as file:
             file.write(bytecode)
     
         p = subprocess.run("docker run -v {}:/tmp mythril/myth a -f /tmp/tmp/{} --execution-timeout {}".format(self.wd, address, self.TIME), shell=True, capture_output=True)
         with open(self.wd + "/data/" + address, "w") as file:
             file.writelines(p.stdout.decode())
+        logging.info(f"Done Scanning {address}")
         
         os.remove(self.wd + "/tmp/" + address)
         _stop = time()
         print(log_output(thread_n, len(bytecode[2:]), _stop - _start))
+        logging.info(log_output(thread_n, len(bytecode[2:]), _stop - _start))
     
 def log_output(n_thread: int, bytecode_len: int, delta_time: float):
     

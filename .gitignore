@@ -5,6 +5,7 @@ data/
 
 #junk
 tmp/
+*.log
 
 # vs code
 **/__pycache__/
