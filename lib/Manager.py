@@ -102,7 +102,11 @@ class Manager:
         """Function called by a thread to receive a bytecode and it's address if never checked before """
         with self.lock:
             while True:
-                if len(self.transactions) == 0: self.update_transactions()
+
+                if len(self.transactions) == 0: 
+                    self.update_transactions()
+                    continue
+
                 address = self.transactions.pop()
                 if address in self.history: 
                     logging.debug(f"{address} already in history")
@@ -124,14 +128,21 @@ class Manager:
     def get_code(self, address: str):
         """returns '0x' if not a contract, else a string with the hex bytecode"""
         # if not _check_addr(address): return None
-        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY))
+        response
+        try:
+            response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY), timeout=10)
+        except Exception as e:
+            print("Exception in getting URL Content")
+            logging.error(e)
         if response.status_code != 200: 
             print(response.reason)
+            logging.error(response.reason)
             exit()
         
         payload = response.json()
         if "status" in payload: 
             print(payload)
+            logging.error(payload)
             exit()
         
         return payload["result"]
@@ -141,31 +152,45 @@ class Manager:
         """Specify n for a specific block, leave -1 to get the last one created"""
     
         latest_block = self.get_latest_block_number() if n >= 0 else hex(n)
-        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber&tag={}&boolean=true&apikey={}".format(latest_block, self.API_KEY))
+        response
+        try: 
+            response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber&tag={}&boolean=true&apikey={}".format(latest_block, self.API_KEY), timeout=10)
+        except Exception as e:
+            print("Exception in getting URL Content")
+            logging.error(e)
         if response.status_code != 200: 
             # HTTP Error
             print(response.reason)
+            logging.error(response.reason)
             exit()
 
         payload = response.json()
         if "status" in payload: 
             # Bad API request
             print(payload)
+            logging.error(payload)
             exit()
 
         return payload["result"]
     
     def get_latest_block_number(self) -> str:
-        response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey={}".format(self.API_KEY))        
+        response
+        try:
+            response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey={}".format(self.API_KEY), timeout=10)
+        except Exception as e:
+            print("Exception in getting URL Content")
+            logging.error(e)
         if response.status_code != 200: 
             """http error"""
             print(response.reason)
+            logging.error(response.reason)
             exit()
 
         payload = response.json()
         if "status" in payload: 
             """bad api request"""
             print(payload)
+            logging.error(payload)
             exit()
 
         return payload["result"]
@@ -175,6 +200,10 @@ class Manager:
         """Function runned by threads, it stores the bytecode into <workdir>/tmp/ and pass it to myth docker container. After the analysis the file get removed"""
         
         address, bytecode = self.get_fields()
+        if self.stopped: 
+            logging.warn(f"Dropping contract at {address}")
+            
+            return
         _start = time()
         print(f"TH-{thread_n} is Scanning {address}")
         logging.info(f"Start Scanning {address}")
