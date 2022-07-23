@@ -86,7 +86,7 @@ class Manager:
             if block == self.prev_block:
                 print("Waiting for a new block...")
                 logging.warning("Waiting for a new block...")
-                sleep(60)
+                sleep(14)
                 continue
             self.prev_block = block
             break
@@ -111,8 +111,15 @@ class Manager:
                 if address in self.history: 
                     logging.debug(f"{address} already in history")
                     continue
+                
+                if address is None:
+                    logging.debug("address is None")
+                    continue
 
                 bytecode = self.get_code(address)
+                if bytecode is None: 
+                    logging.error("bytecode is None")
+                    continue
                 if bytecode == "0x": 
                     self.history[address] = False
                     logging.debug(f"{address} is not a Smart Contract")
@@ -128,22 +135,22 @@ class Manager:
     def get_code(self, address: str):
         """returns '0x' if not a contract, else a string with the hex bytecode"""
         # if not _check_addr(address): return None
-        response
+        response=""
         try:
             response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getCode&address={}&tag=latest&apikey={}".format(address, self.API_KEY), timeout=10)
         except Exception as e:
             print("Exception in getting URL Content")
             logging.error(e)
+            return None
+
         if response.status_code != 200: 
-            print(response.reason)
             logging.error(response.reason)
-            exit()
+            return None
         
         payload = response.json()
-        if "status" in payload: 
-            print(payload)
+        if "status" in payload or "result" not in payload: 
             logging.error(payload)
-            exit()
+            return None
         
         return payload["result"]
 
@@ -152,7 +159,7 @@ class Manager:
         """Specify n for a specific block, leave -1 to get the last one created"""
     
         latest_block = self.get_latest_block_number() if n >= 0 else hex(n)
-        response
+        response=""
         try: 
             response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_getBlockByNumber&tag={}&boolean=true&apikey={}".format(latest_block, self.API_KEY), timeout=10)
         except Exception as e:
@@ -160,21 +167,20 @@ class Manager:
             logging.error(e)
         if response.status_code != 200: 
             # HTTP Error
-            print(response.reason)
             logging.error(response.reason)
-            exit()
+            return None
 
         payload = response.json()
-        if "status" in payload: 
+        if "status" in payload or "result" not in payload: 
             # Bad API request
             print(payload)
             logging.error(payload)
-            exit()
+            return None
 
         return payload["result"]
     
     def get_latest_block_number(self) -> str:
-        response
+        response=""
         try:
             response = requests.get("http://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey={}".format(self.API_KEY), timeout=10)
         except Exception as e:
@@ -182,16 +188,15 @@ class Manager:
             logging.error(e)
         if response.status_code != 200: 
             """http error"""
-            print(response.reason)
             logging.error(response.reason)
-            exit()
+            return None
 
         payload = response.json()
-        if "status" in payload: 
+        if "status" in payload or "result" not in payload: 
             """bad api request"""
-            print(payload)
+
             logging.error(payload)
-            exit()
+            return None
 
         return payload["result"]
 

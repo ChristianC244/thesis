@@ -1,6 +1,7 @@
 # sensitive
 .env
 history.json
+old_history.json
 data/
 
 #junk
